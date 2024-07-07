@@ -94,7 +94,7 @@ class MainActivity : AppCompatActivity() {
 
                 val h = mutable.height
                 val w = mutable.width
-                paint.textSize = h / 15f
+                paint.textSize = h / 30f // Adjust text size to be smaller
                 paint.strokeWidth = h / 85f
                 var x = 0
                 bottleDetected = false
@@ -105,6 +105,11 @@ class MainActivity : AppCompatActivity() {
                     val score = scores[index]
                     if (score > 0.5) {
                         val label = labels[classes[index].toInt()]
+                        val left = locations[index * 4 + 1] * w
+                        val top = locations[index * 4] * h
+                        val right = locations[index * 4 + 3] * w
+                        val bottom = locations[index * 4 + 2] * h
+
                         if (label == "bottle") {
                             bottleDetected = true
                             val centerX = (locations[index * 4 + 1] + locations[index * 4 + 3]) / 2 * w
@@ -117,22 +122,17 @@ class MainActivity : AppCompatActivity() {
                             }
                             paint.color = colors[index % colors.size]
                             paint.style = Paint.Style.STROKE
-                            canvas.drawRect(
-                                RectF(
-                                    locations[index * 4 + 1] * w,
-                                    locations[index * 4] * h,
-                                    locations[index * 4 + 3] * w,
-                                    locations[index * 4 + 2] * h
-                                ),
-                                paint
-                            )
+                            canvas.drawRect(RectF(left, top, right, bottom), paint)
                             paint.style = Paint.Style.FILL
+                            val distance = calculateDistance(left, top, right, bottom)
                             canvas.drawText(
-                                "$label $score",
-                                locations[index * 4 + 1] * w,
-                                locations[index * 4] * h,
+                                "$label $score, Distance: %.2f m".format(distance),
+                                left,
+                                top - 10, // Positioning text above the bounding box
                                 paint
                             )
+//                            printToSerialMonitor("Distance from camera:", distance)
+                            sendWebSocketMessage("Distance from camera $distance")
                         } else if (label == "person") {
                             personDetected = true
                         }
@@ -144,6 +144,7 @@ class MainActivity : AppCompatActivity() {
                 // Start timer to check bottle position every 3 seconds
                 startTimer()
             }
+
         }
 
         cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -151,6 +152,10 @@ class MainActivity : AppCompatActivity() {
         // Initialize WebSocket
         connectWebSocket("192.168.4.1")
     }
+
+//    private fun sendWebSocketMessage(message: String, distance: Float) {
+//
+//    }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -242,6 +247,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
     private fun startTimer() {
         if (timer == null) {
             timer = Timer()
@@ -249,7 +255,7 @@ class MainActivity : AppCompatActivity() {
                 override fun run() {
                     handleBottlePosition()
                 }
-            }, 0, 300) // Check every 1.5 seconds
+            }, 0, 300) // Check every 3 seconds
         }
     }
 
@@ -267,14 +273,11 @@ class MainActivity : AppCompatActivity() {
                     "left" -> sendCommandToESP32("MoveCar,3") // Move left
                     "right" -> sendCommandToESP32("MoveCar,4") // Move right
                 }
-//
             }
         } else if (personDetected) {
             sendCommandToESP32("MoveCar,0") // Stop
         }
-//        else if (!bottleDetected) {
-//            sendCommandToESP32("MoveCar,0") // Stop
-//        }
+
     }
 
     private fun sendCommandToESP32(command: String) {
@@ -284,5 +287,22 @@ class MainActivity : AppCompatActivity() {
         } else {
             Log.e("WebSocket", "WebSocket is not connected")
         }
+    }
+    private fun printToSerialMonitor(message: String, variable: Any) {
+        Log.d("SerialMonitor", "$message $variable")
+        // Adjust this method if you want to print to a different log level or handle differently
+    }
+
+    private fun calculateDistance(left: Float, top: Float, right: Float, bottom: Float): Float {
+        // Replace with your actual distance calculation logic based on object position in image
+        val objectWidthPixels = right - left
+        val focalLength = 500.0 // Example: Focal length of the camera in pixels
+        val objectRealWidth = 0.1 // Example: Real width of the object in meters (adjust as per your object)
+        val imageWidthPixels = bitmap.width.toFloat() // Width of the captured image in pixels
+
+        // Calculate distance using simple perspective formula
+        val distance = focalLength * objectRealWidth * imageWidthPixels / (objectWidthPixels * 2.0)
+
+        return distance.toFloat()
     }
 }
