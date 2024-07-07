@@ -38,11 +38,11 @@ AsyncWebSocket wsCarInput("/CarInput");
 
 void rotateMotor(int motorNumber, int motorDirection) {
     if (motorDirection == FORWARD) {
-        digitalWrite(motorPins[motorNumber].pinIN1, HIGH/2);
+        digitalWrite(motorPins[motorNumber].pinIN1, HIGH);
         digitalWrite(motorPins[motorNumber].pinIN2, LOW);
     } else if (motorDirection == BACKWARD) {
         digitalWrite(motorPins[motorNumber].pinIN1, LOW);
-        digitalWrite(motorPins[motorNumber].pinIN2, HIGH/2);
+        digitalWrite(motorPins[motorNumber].pinIN2, HIGH);
     } else {
         digitalWrite(motorPins[motorNumber].pinIN1, LOW);
         digitalWrite(motorPins[motorNumber].pinIN2, LOW);
