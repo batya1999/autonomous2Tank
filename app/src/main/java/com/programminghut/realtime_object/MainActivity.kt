@@ -249,7 +249,7 @@ class MainActivity : AppCompatActivity() {
                 override fun run() {
                     handleBottlePosition()
                 }
-            }, 0, 3000) // Check every 3 seconds
+            }, 0, 300) // Check every 1.5 seconds
         }
     }
 
@@ -267,10 +267,14 @@ class MainActivity : AppCompatActivity() {
                     "left" -> sendCommandToESP32("MoveCar,3") // Move left
                     "right" -> sendCommandToESP32("MoveCar,4") // Move right
                 }
+//
             }
         } else if (personDetected) {
             sendCommandToESP32("MoveCar,0") // Stop
         }
+//        else if (!bottleDetected) {
+//            sendCommandToESP32("MoveCar,0") // Stop
+//        }
     }
 
     private fun sendCommandToESP32(command: String) {
