@@ -14,8 +14,8 @@ struct MOTOR_PINS {
 };
 
 std::vector<MOTOR_PINS> motorPins = {
-        {22, 7, 15},  // RIGHT_MOTOR Pins (EnA, IN1, IN2)
-        {23, 16, 17}  // LEFT_MOTOR Pins (EnB, IN3, IN4)
+        {3, 7, 15},  // RIGHT_MOTOR Pins (EnA, IN1, IN2)
+        {8, 16, 17}  // LEFT_MOTOR Pins (EnB, IN3, IN4)
 };
 
 #define UP 1
@@ -36,16 +36,21 @@ const char* password = "12345678";
 AsyncWebServer server(80);
 AsyncWebSocket wsCarInput("/CarInput");
 
+int motorSpeed = 127;  // Default motor speed (PWM value)
+
 void rotateMotor(int motorNumber, int motorDirection) {
     if (motorDirection == FORWARD) {
         digitalWrite(motorPins[motorNumber].pinIN1, HIGH);
         digitalWrite(motorPins[motorNumber].pinIN2, LOW);
+        analogWrite(motorPins[motorNumber].pinEn, motorSpeed);
     } else if (motorDirection == BACKWARD) {
         digitalWrite(motorPins[motorNumber].pinIN1, LOW);
         digitalWrite(motorPins[motorNumber].pinIN2, HIGH);
+        analogWrite(motorPins[motorNumber].pinEn, motorSpeed);
     } else {
         digitalWrite(motorPins[motorNumber].pinIN1, LOW);
         digitalWrite(motorPins[motorNumber].pinIN2, LOW);
+        analogWrite(motorPins[motorNumber].pinEn, 0);
     }
 }
 
@@ -131,8 +136,7 @@ void onCarInputWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *clie
                 if (key == "MoveCar") {
                     moveCar(valueInt);
                 } else if (key == "Speed") {
-                    analogWrite(motorPins[RIGHT_MOTOR].pinEn, valueInt / 2);  // Adjust PWM value for right motor
-                    analogWrite(motorPins[LEFT_MOTOR].pinEn, valueInt / 2);   // Adjust PWM value for left motor
+                    motorSpeed = valueInt;  // Adjust motor speed (PWM value)
                 } else if (key == "Direction") {
                     moveCarCommand(value, valueInt);  // changed key to value for moveCarCommand
                 }
