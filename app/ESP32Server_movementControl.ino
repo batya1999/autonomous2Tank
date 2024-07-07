@@ -14,8 +14,8 @@ struct MOTOR_PINS {
 };
 
 std::vector<MOTOR_PINS> motorPins = {
-        {3, 7, 15},  // RIGHT_MOTOR Pins (EnA, IN1, IN2)
-        {8, 16, 17}  // LEFT_MOTOR Pins (EnB, IN3, IN4)
+    {3, 7, 15},  // RIGHT_MOTOR Pins (EnA, IN1, IN2)
+    {8, 16, 17}  // LEFT_MOTOR Pins (EnB, IN3, IN4)
 };
 
 #define UP 1
@@ -139,6 +139,13 @@ void onCarInputWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *clie
                     motorSpeed = valueInt;  // Adjust motor speed (PWM value)
                 } else if (key == "Direction") {
                     moveCarCommand(value, valueInt);  // changed key to value for moveCarCommand
+                } else if (key == "Distance") {
+                    // Assuming value is the distance in meters
+                    float distance = atof(value.c_str());  // Convert to float
+                    Serial.printf("Distance: %.2f meters\n", distance);
+                    // You can add your logic here to handle the distance information
+                    // For example, you can trigger actions based on the distance
+                    // or store it for later use.
                 }
             }
             break;
