@@ -112,14 +112,24 @@ class MainActivity : AppCompatActivity() {
 
                         if (label == "bottle") {
                             bottleDetected = true
-                            val centerX = (locations[index * 4 + 1] + locations[index * 4 + 3]) / 2 * w
+                            val centerX = (left + right) / 2
+                            val imageCenterX = w / 2
+                            val distanceFromCenter = centerX - imageCenterX
+                            val angle = Math.toDegrees(Math.atan2(distanceFromCenter.toDouble(), h.toDouble()))
+
                             if (centerX > w / 3 && centerX < 2 * w / 3) {
                                 bottleCentered = true
+                                sendWebSocketMessage("go forward")
                             } else if (centerX <= w / 3) {
                                 bottlePosition = "left"
+                                sendWebSocketMessage("go left $angle degrees")
+//                                sendWebSocketMessage("Angle to center $angle degrees")
                             } else {
                                 bottlePosition = "right"
+                                sendWebSocketMessage("go right $angle degrees")
+//                                sendWebSocketMessage("Angle to center $angle degrees")
                             }
+
                             paint.color = colors[index % colors.size]
                             paint.style = Paint.Style.STROKE
                             canvas.drawRect(RectF(left, top, right, bottom), paint)
@@ -131,7 +141,7 @@ class MainActivity : AppCompatActivity() {
                                 top - 10, // Positioning text above the bounding box
                                 paint
                             )
-//                            printToSerialMonitor("Distance from camera:", distance)
+                            // Print to serial monitor for the distance and angle
                             sendWebSocketMessage("Distance from camera $distance")
                         } else if (label == "person") {
                             personDetected = true
@@ -241,7 +251,7 @@ class MainActivity : AppCompatActivity() {
     private fun sendWebSocketMessage(message: String) {
         if (webSocketClient != null && webSocketClient!!.isOpen) {
             webSocketClient!!.send(message)
-            Log.d("WebSocket", "Message sent: $message")
+            Log.e("WebSocket", "Message sent: $message")
         } else {
             Log.e("WebSocket", "WebSocket is not connected")
         }
@@ -255,7 +265,7 @@ class MainActivity : AppCompatActivity() {
                 override fun run() {
                     handleBottlePosition()
                 }
-            }, 0, 300) // Check every 3 seconds
+            }, 0, 300) // Checks every 3 seconds
         }
     }
 
