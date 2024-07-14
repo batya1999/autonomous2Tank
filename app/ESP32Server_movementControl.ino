@@ -14,7 +14,7 @@ struct MOTOR_PINS {
 };
 
 std::vector<MOTOR_PINS> motorPins = {
-    {3, 7, 15},  // RIGHT_MOTOR Pins (EnA, IN1, IN2)
+    {18, 7, 15},  // RIGHT_MOTOR Pins (EnA, IN1, IN2)
     {8, 16, 17}  // LEFT_MOTOR Pins (EnB, IN3, IN4)
 };
 
@@ -36,7 +36,7 @@ const char* password = "12345678";
 AsyncWebServer server(80);
 AsyncWebSocket wsCarInput("/CarInput");
 
-int motorSpeed = 127;  // Default motor speed (PWM value)
+int motorSpeed = 255;  // Default motor speed (PWM value)
 
 void rotateMotor(int motorNumber, int motorDirection) {
     if (motorDirection == FORWARD) {
@@ -130,7 +130,8 @@ void onCarInputWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *clie
                 std::string key, value;
                 std::getline(ss, key, ',');
                 std::getline(ss, value, ',');
-                Serial.printf("Key [%s] Value[%s]\n", key.c_str(), value.c_str());
+                Serial.printf("[%s]\n", key.c_str());
+                // Serial.printf("speed value is:", motorSpeed);
                 int valueInt = atoi(value.c_str());
 
                 if (key == "MoveCar") {
