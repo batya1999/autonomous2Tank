@@ -14,14 +14,15 @@ struct MOTOR_PINS {
 };
 
 std::vector<MOTOR_PINS> motorPins = {
-    {18, 7, 15},  // RIGHT_MOTOR Pins (EnA, IN1, IN2)
-    {8, 16, 17}  // LEFT_MOTOR Pins (EnB, IN3, IN4)
+    {8, 16, 17}, // RIGHT_MOTOR Pins (EnA, IN1, IN2)
+    {18, 7, 15}  // LEFT_MOTOR Pins (EnB, IN3, IN4)
 };
 
 #define UP 1
 #define DOWN 2
 #define LEFT 3
 #define RIGHT 4
+#define SEARCH 5
 #define STOP 0
 
 #define RIGHT_MOTOR 0
@@ -36,7 +37,15 @@ const char* password = "12345678";
 AsyncWebServer server(80);
 AsyncWebSocket wsCarInput("/CarInput");
 
-int motorSpeed = 255;  // Default motor speed (PWM value)
+int motorSpeed = 120; // Default motor speed (PWM value)- minimum is 85 and maximum is 255
+
+struct CommandLog {
+    String command;
+    unsigned long duration;
+};
+
+std::vector<CommandLog> commandLog;
+unsigned long commandStartTime = 0;
 
 void rotateMotor(int motorNumber, int motorDirection) {
     if (motorDirection == FORWARD) {
@@ -54,42 +63,70 @@ void rotateMotor(int motorNumber, int motorDirection) {
     }
 }
 
+void logCommandDuration(String command) {
+    if (command == "search") {
+        return;
+    }
+    unsigned long currentTime = millis();
+    if (!commandLog.empty()) {
+        CommandLog &lastCommand = commandLog.back();
+        lastCommand.duration = currentTime - commandStartTime;
+    }
+    commandStartTime = currentTime;
+    commandLog.push_back({command, 0});
+}
+
 void moveCar(int inputValue) {
     Serial.printf("Got value as %d\n", inputValue);
+    String direction;
     switch (inputValue) {
         case UP:
+            direction = "up";
+            motorSpeed = 80;
             rotateMotor(RIGHT_MOTOR, FORWARD);
             rotateMotor(LEFT_MOTOR, FORWARD);
             break;
-
         case DOWN:
+            direction = "down";
+            motorSpeed = 80;
             rotateMotor(RIGHT_MOTOR, BACKWARD);
             rotateMotor(LEFT_MOTOR, BACKWARD);
             break;
-
         case LEFT:
+            direction = "left";
+            motorSpeed = 120;
             rotateMotor(RIGHT_MOTOR, FORWARD);
-            rotateMotor(LEFT_MOTOR, BACKWARD);
+            rotateMotor(LEFT_MOTOR, STOP);
             break;
-
         case RIGHT:
+            direction = "right";
+            motorSpeed = 120;
+            rotateMotor(RIGHT_MOTOR, STOP);
+            rotateMotor(LEFT_MOTOR, FORWARD);
+            break;
+        case SEARCH:
+            direction = "search";
+            motorSpeed = 170;
             rotateMotor(RIGHT_MOTOR, BACKWARD);
             rotateMotor(LEFT_MOTOR, FORWARD);
             break;
-
         case STOP:
+            direction = "stop";
             rotateMotor(RIGHT_MOTOR, STOP);
             rotateMotor(LEFT_MOTOR, STOP);
             break;
-
         default:
+            direction = "stop";
             rotateMotor(RIGHT_MOTOR, STOP);
             rotateMotor(LEFT_MOTOR, STOP);
             break;
     }
+    logCommandDuration(direction);
 }
 
 void moveCarCommand(const std::string &direction, int value) {
+    String dir = String(direction.c_str());  // Convert std::string to Arduino String
+    logCommandDuration(dir);
     if (direction == "right") {
         rotateMotor(RIGHT_MOTOR, BACKWARD);
         rotateMotor(LEFT_MOTOR, FORWARD);
@@ -102,24 +139,38 @@ void moveCarCommand(const std::string &direction, int value) {
     } else if (direction == "down") {
         rotateMotor(RIGHT_MOTOR, BACKWARD);
         rotateMotor(LEFT_MOTOR, BACKWARD);
+    } else if (direction == "search") {
+        rotateMotor(RIGHT_MOTOR, BACKWARD);
+        rotateMotor(LEFT_MOTOR, FORWARD); 
     }
 
-    delay(value);  // Move for the specified duration (in milliseconds)
-    moveCar(STOP);  // Stop after the duration
+    delay(value); // Move for the specified duration (in milliseconds)
+    moveCar(STOP); // Stop after the duration
 }
 
 void handleNotFound(AsyncWebServerRequest *request) {
     request->send(404, "text/plain", "File Not Found");
 }
 
+void printCommandLog() {
+    String path = "";
+    for (const auto &log : commandLog) {
+        path += log.command + ":" + String(log.duration / 1000.0, 2) + " sec, ";
+    }
+    Serial.printf("Calculated path: [%s]\n", path.c_str());
+    commandLog.clear(); // Clear the log after printing
+}
+
 void onCarInputWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
     switch (type) {
         case WS_EVT_CONNECT:
             Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+            commandStartTime = millis(); // Start the command timer
             break;
         case WS_EVT_DISCONNECT:
             Serial.printf("WebSocket client #%u disconnected\n", client->id());
             moveCar(STOP);
+            printCommandLog(); // Print the command log on disconnection
             break;
         case WS_EVT_DATA: {
             AwsFrameInfo *info = (AwsFrameInfo*)arg;
@@ -131,18 +182,17 @@ void onCarInputWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *clie
                 std::getline(ss, key, ',');
                 std::getline(ss, value, ',');
                 Serial.printf("[%s]\n", key.c_str());
-                // Serial.printf("speed value is:", motorSpeed);
                 int valueInt = atoi(value.c_str());
 
                 if (key == "MoveCar") {
                     moveCar(valueInt);
                 } else if (key == "Speed") {
-                    motorSpeed = valueInt;  // Adjust motor speed (PWM value)
+                    motorSpeed = valueInt; // Adjust motor speed (PWM value)
                 } else if (key == "Direction") {
-                    moveCarCommand(value, valueInt);  // changed key to value for moveCarCommand
+                    moveCarCommand(value, valueInt); // changed key to value for moveCarCommand
                 } else if (key == "Distance") {
                     // Assuming value is the distance in meters
-                    float distance = atof(value.c_str());  // Convert to float
+                    float distance = atof(value.c_str()); // Convert to float
                     Serial.printf("Distance: %.2f meters\n", distance);
                     // You can add your logic here to handle the distance information
                     // For example, you can trigger actions based on the distance
