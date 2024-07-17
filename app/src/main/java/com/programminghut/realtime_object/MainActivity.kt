@@ -53,6 +53,12 @@ class MainActivity : AppCompatActivity() {
     private var personDetected = false
     private var timer: Timer? = null
 
+    // Variables to track commands and durations
+    private val commandLog = mutableListOf<Pair<String, Long>>()
+    private var commandStartTime: Long = 0
+    private var lastLoggedCommand: String = ""
+    private var accumulatedDuration: Long = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -123,11 +129,9 @@ class MainActivity : AppCompatActivity() {
                             } else if (centerX <= w / 3) {
                                 bottlePosition = "left"
                                 sendWebSocketMessage("go left $angle degrees")
-//                                sendWebSocketMessage("Angle to center $angle degrees")
                             } else {
                                 bottlePosition = "right"
                                 sendWebSocketMessage("go right $angle degrees")
-//                                sendWebSocketMessage("Angle to center $angle degrees")
                             }
 
                             paint.color = colors[index % colors.size]
@@ -143,6 +147,10 @@ class MainActivity : AppCompatActivity() {
                             )
                             // Print to serial monitor for the distance and angle
                             sendWebSocketMessage("Distance from camera $distance")
+
+                            if (distance < 70.0) {
+                                sendWebSocketMessage("MoveCar,5") // Search
+                            }
                         } else if (label == "person") {
                             personDetected = true
                         }
@@ -150,8 +158,6 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 imageView.setImageBitmap(mutable)
-
-                // Start timer to check bottle position every 3 seconds
                 startTimer()
             }
 
@@ -162,10 +168,6 @@ class MainActivity : AppCompatActivity() {
         // Initialize WebSocket
         connectWebSocket("192.168.4.1")
     }
-
-//    private fun sendWebSocketMessage(message: String, distance: Float) {
-//
-//    }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -230,6 +232,7 @@ class MainActivity : AppCompatActivity() {
             override fun onOpen(handshakedata: ServerHandshake) {
                 Log.d("WebSocket", "Connected")
                 sendWebSocketMessage("connection from app!")
+                commandStartTime = System.currentTimeMillis()
             }
 
             override fun onMessage(message: String) {
@@ -238,6 +241,8 @@ class MainActivity : AppCompatActivity() {
 
             override fun onClose(code: Int, reason: String, remote: Boolean) {
                 Log.d("WebSocket", "Disconnected: $reason")
+                logCommandDuration("disconnect")
+                printCommandLog()
             }
 
             override fun onError(ex: Exception) {
@@ -250,13 +255,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun sendWebSocketMessage(message: String) {
         if (webSocketClient != null && webSocketClient!!.isOpen) {
+            logCommandDuration(message)
             webSocketClient!!.send(message)
-            Log.e("WebSocket", "Message sent: $message")
+            Log.d("WebSocket", "Message sent: $message")
         } else {
             Log.e("WebSocket", "WebSocket is not connected")
         }
     }
-
 
     private fun startTimer() {
         if (timer == null) {
@@ -265,9 +270,71 @@ class MainActivity : AppCompatActivity() {
                 override fun run() {
                     handleBottlePosition()
                 }
-            }, 0, 300) // Checks every 3 seconds
+            }, 0, 100) // Checks every 3 seconds
         }
     }
+
+
+    // Function to log command duration
+// Function to log command duration
+    private fun logCommandDuration(command: String) {
+        val directionCommands = setOf("MoveCar,1", "MoveCar,2", "MoveCar,3", "MoveCar,4", "MoveCar,0")
+        if (directionCommands.contains(command)) {
+            val currentTime = System.currentTimeMillis()
+            if (lastLoggedCommand == command) {
+                accumulatedDuration += (currentTime - commandStartTime)
+            } else {
+                if (lastLoggedCommand.isNotEmpty()) {
+                    commandLog.add(Pair(lastLoggedCommand, accumulatedDuration))
+                }
+                lastLoggedCommand = command
+                commandStartTime = currentTime
+                accumulatedDuration = 0
+            }
+            commandStartTime = currentTime
+        }
+    }
+
+    // Function to print the combined command log
+    private fun printCommandLog() {
+        if (lastLoggedCommand.isNotEmpty()) {
+            commandLog.add(Pair(lastLoggedCommand, accumulatedDuration + (System.currentTimeMillis() - commandStartTime)))
+        }
+        val filteredCommandLog = commandLog.filter { it.first.startsWith("MoveCar,") && !it.first.equals("MoveCar,5") }
+
+        // Combine consecutive commands of the same type
+        val combinedCommandLog = mutableListOf<Pair<String, Long>>()
+        var currentCommand = ""
+        var currentDuration: Long = 0
+
+        for (log in filteredCommandLog) {
+            if (log.first == currentCommand) {
+                currentDuration += log.second
+            } else {
+                if (currentCommand.isNotEmpty()) {
+                    combinedCommandLog.add(Pair(currentCommand, currentDuration))
+                }
+                currentCommand = log.first
+                currentDuration = log.second
+            }
+        }
+        // Add the last command
+        if (currentCommand.isNotEmpty()) {
+            combinedCommandLog.add(Pair(currentCommand, currentDuration))
+        }
+
+        // Format the combined commands for sending
+        val pathString = combinedCommandLog.joinToString(separator = "\n") { "${it.first}: ${it.second / 1000.0} sec" }
+        sendWebSocketMessage("Path: \n$pathString")
+
+        // Clear the command log for the next session
+        commandLog.clear()
+        lastLoggedCommand = ""
+        accumulatedDuration = 0
+    }
+
+
+
 
     private fun stopTimer() {
         timer?.cancel()
@@ -287,20 +354,15 @@ class MainActivity : AppCompatActivity() {
         } else if (personDetected) {
             sendCommandToESP32("MoveCar,0") // Stop
         }
-
     }
 
     private fun sendCommandToESP32(command: String) {
         if (webSocketClient != null && webSocketClient!!.isOpen) {
-            webSocketClient!!.send(command)
+            sendWebSocketMessage(command)
             Log.d("WebSocket", "Command sent to ESP32: $command")
         } else {
             Log.e("WebSocket", "WebSocket is not connected")
         }
-    }
-    private fun printToSerialMonitor(message: String, variable: Any) {
-        Log.d("SerialMonitor", "$message $variable")
-        // Adjust this method if you want to print to a different log level or handle differently
     }
 
     private fun calculateDistance(left: Float, top: Float, right: Float, bottom: Float): Float {
